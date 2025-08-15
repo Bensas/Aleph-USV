@@ -1,101 +1,91 @@
-#include <WiFi.h>
-#include <WebServer.h>
-#include <ESP32Servo.h>
+// ESP32 + BMP280 + MPU6050 over I2C
+// Libraries to install:
+//  - Adafruit BMP280 Library
+//  - Adafruit Unified Sensor
+//  - Adafruit MPU6050
 
-// WiFi credentials
-const char* ssid = "Vitel Tonnet-2.4Ghz";
-const char* password = "crazyivan42";
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_BMP280.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 
-// Pin definitions
-#define SERVO_PIN 27
-#define MOTOR_IN1 26
-#define MOTOR_IN2 25
+// ---- I2C pins (ESP32) ----
+constexpr int I2C_SDA = 21;
+constexpr int I2C_SCL = 22;
 
-Servo myServo;
-WebServer server(80);
+// ---- I2C addresses ----
+// BMP280: SDO=GND -> 0x76 (yours), SDO=3V3 -> 0x77
+// MPU6050: AD0=GND -> 0x68 (default), AD0=3V3 -> 0x69
+constexpr uint8_t BMP_ADDR = 0x76;
+constexpr uint8_t MPU_ADDR = 0x68;  // change to 0x69 if AD0 is HIGH
 
-// Current states
-int servoAngle = 90; // Default to middle
-String motorState = "stop";
+static const float SEA_LEVEL_HPA = 1013.25; // set to local sea-level pressure
 
-void handleRoot() {
-  String html = "<html><head><title>ESP32 Control</title></head><body>";
-  html += "<h2>Servo Control</h2>";
-  html += "<form action='/setServo' method='get'>";
-  html += "Angle (0-180): <input type='number' name='angle' min='0' max='180' value='" + String(servoAngle) + "'>";
-  html += "<input type='submit' value='Set Servo'>";
-  html += "</form>";
-  html += "<h2>Motor Control</h2>";
-  html += "<form action='/setMotor' method='get'>";
-  html += "<button name='action' value='forward'>Forward</button> ";
-  html += "<button name='action' value='backward'>Backward</button> ";
-  html += "<button name='action' value='stop'>Stop</button>";
-  html += "</form>";
-  html += "<p>Current Servo Angle: " + String(servoAngle) + "</p>";
-  html += "<p>Motor State: " + motorState + "</p>";
-  html += "</body></html>";
-  server.send(200, "text/html", html);
-}
-
-void handleSetServo() {
-  if (server.hasArg("angle")) {
-    int angle = server.arg("angle").toInt();
-    if (angle >= 0 && angle <= 180) {
-      servoAngle = angle;
-      myServo.write(servoAngle);
-    }
-  }
-  server.sendHeader("Location", "/");
-  server.send(303);
-}
-
-void handleSetMotor() {
-  if (server.hasArg("action")) {
-    String action = server.arg("action");
-    if (action == "forward") {
-      digitalWrite(MOTOR_IN1, HIGH);
-      digitalWrite(MOTOR_IN2, LOW);
-      motorState = "forward";
-    } else if (action == "backward") {
-      digitalWrite(MOTOR_IN1, LOW);
-      digitalWrite(MOTOR_IN2, HIGH);
-      motorState = "backward";
-    } else {
-      digitalWrite(MOTOR_IN1, LOW);
-      digitalWrite(MOTOR_IN2, LOW);
-      motorState = "stop";
-    }
-  }
-  server.sendHeader("Location", "/");
-  server.send(303);
-}
+Adafruit_BMP280 bmp;       // I2C
+Adafruit_MPU6050 mpu;      // I2C
 
 void setup() {
   Serial.begin(115200);
-  myServo.attach(SERVO_PIN);
-  myServo.write(servoAngle);
-  pinMode(MOTOR_IN1, OUTPUT);
-  pinMode(MOTOR_IN2, OUTPUT);
-  digitalWrite(MOTOR_IN1, LOW);
-  digitalWrite(MOTOR_IN2, LOW);
+  delay(200);
 
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  // Start I2C on explicit ESP32 pins
+  Wire.begin(I2C_SDA, I2C_SCL);
+  delay(10);
+
+  // ----- BMP280 init -----
+  bool bmp_ok = bmp.begin(BMP_ADDR) || bmp.begin(0x77);
+  if (!bmp_ok) {
+    Serial.println("ERROR: BMP280 not found at 0x76/0x77. Check SDO/CSB/SDA/SCL wiring.");
+    while (1) delay(10);
   }
-  Serial.println("\nWiFi connected!");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
 
-  server.on("/", handleRoot);
-  server.on("/setServo", handleSetServo);
-  server.on("/setMotor", handleSetMotor);
-  server.begin();
-  Serial.println("HTTP server started");
+  // Reasonable, stable sampling config
+  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
+                  Adafruit_BMP280::SAMPLING_X2,   // temperature
+                  Adafruit_BMP280::SAMPLING_X16,  // pressure
+                  Adafruit_BMP280::FILTER_X16,
+                  Adafruit_BMP280::STANDBY_MS_125);
+
+  // ----- MPU6050 init -----
+  // If your AD0 is HIGH, use: if (!mpu.begin(0x69)) { ... }
+  if (!mpu.begin(MPU_ADDR)) {
+    Serial.println("ERROR: MPU6050 not found at 0x68/0x69. Check AD0/SDA/SCL wiring.");
+    while (1) delay(10);
+  }
+
+  // Configure ranges & filter (nice defaults)
+  mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+
+  Serial.println("BMP280 + MPU6050 initialized over I2C.");
 }
 
 void loop() {
-  server.handleClient();
+  // ---- BMP280 reads ----
+  float t_bmp   = bmp.readTemperature();         // °C
+  float p_hpa   = bmp.readPressure() / 100.0;    // hPa
+  float alt_m   = bmp.readAltitude(SEA_LEVEL_HPA);
+
+  // ---- MPU6050 reads ----
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp); // a: m/s^2, g: rad/s, temp.temperature in °C
+
+  // ---- Print nicely ----
+  Serial.print("BMP  T: "); Serial.print(t_bmp);  Serial.print(" °C  ");
+  Serial.print("P: ");      Serial.print(p_hpa);  Serial.print(" hPa  ");
+  Serial.print("Alt: ");    Serial.print(alt_m);  Serial.println(" m");
+
+  Serial.print("MPU  T: "); Serial.print(temp.temperature); Serial.println(" °C");
+  Serial.print("Acc  x: "); Serial.print(a.acceleration.x);
+  Serial.print("  y: ");    Serial.print(a.acceleration.y);
+  Serial.print("  z: ");    Serial.println(a.acceleration.z);
+
+  Serial.print("Gyro x: "); Serial.print(g.gyro.x);
+  Serial.print("  y: ");    Serial.print(g.gyro.y);
+  Serial.print("  z: ");    Serial.println(g.gyro.z);
+
+  Serial.println("-----------------------------");
+  delay(250);
 }
