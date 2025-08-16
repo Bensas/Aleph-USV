@@ -116,7 +116,6 @@ float SensorModule::getGyroZ() {
 void SensorModule::updateGPSData() {
     while (Serial2.available()) {
         char c = Serial2.read();
-        // Serial.print(c);
         if (gps.encode(c)) {
             updateGPSDataFromLibrary();
         }

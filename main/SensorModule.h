@@ -50,7 +50,7 @@ public:
       int scl_pin = 22, 
       uint8_t bmp_address = 0x76, 
       uint8_t mpu_address = 0x68,
-      float sea_level = 1013.25
+      float sea_level = 1023
     );
     
     bool begin();

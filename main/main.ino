@@ -2,7 +2,7 @@
 #include "SensorModule.h"
 #include "WebModule.h"
 
-const char* WIFI_SSID = "Vitel Tonnet-2.4Ghz";     // Replace with your WiFi SSID
+const char* WIFI_SSID = "ALWAYS MONEY IN THE BANANA STAND";     // Replace with your WiFi SSID
 const char* WIFI_PASSWORD = "crazyivan42";  // Replace with your WiFi password
 
 SensorModule sensor_module;
