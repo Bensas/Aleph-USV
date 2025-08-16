@@ -79,6 +79,17 @@ String WebModule::generateHTML() {
     <div class="container">
         <h1>ESP32 Sensor Dashboard</h1>
         <div class="sensor-box">
+            <h2>GPS (GY-GPS6MV2)</h2>
+            <p>Status: <span id="gps-status" class="value">--</span></p>
+            <p>Satellites: <span id="gps-satellites" class="value">--</span></p>
+            <p>Latitude: <span id="gps-lat" class="value">--</span>°</p>
+            <p>Longitude: <span id="gps-lon" class="value">--</span>°</p>
+            <p>Altitude: <span id="gps-altitude" class="value">--</span> m</p>
+            <p>Speed: <span id="gps-speed" class="value">--</span> knots</p>
+            <p>Time: <span id="gps-time" class="value">--</span></p>
+            <p>Date: <span id="gps-date" class="value">--</span></p>
+        </div>
+        <div class="sensor-box">
             <h2>BMP280</h2>
             <p>Temperature: <span id="bmp-temp" class="value">--</span> °C</p>
             <p>Pressure: <span id="bmp-pressure" class="value">--</span> hPa</p>
@@ -102,9 +113,22 @@ String WebModule::generateHTML() {
             fetch('/data')
                 .then(response => response.json())
                 .then(data => {
+                    // Update GPS data
+                    document.getElementById('gps-status').textContent = data.gps.valid ? 'Valid Fix' : 'No Fix';
+                    document.getElementById('gps-satellites').textContent = data.gps.satellites;
+                    document.getElementById('gps-lat').textContent = data.gps.valid ? data.gps.latitude.toFixed(6) : '--';
+                    document.getElementById('gps-lon').textContent = data.gps.valid ? data.gps.longitude.toFixed(6) : '--';
+                    document.getElementById('gps-altitude').textContent = data.gps.valid ? data.gps.altitude.toFixed(1) : '--';
+                    document.getElementById('gps-speed').textContent = data.gps.valid ? data.gps.speed.toFixed(1) : '--';
+                    document.getElementById('gps-time').textContent = data.gps.time || '--';
+                    document.getElementById('gps-date').textContent = data.gps.date || '--';
+                    
+                    // Update BMP280 data
                     document.getElementById('bmp-temp').textContent = data.bmp.temperature.toFixed(2);
                     document.getElementById('bmp-pressure').textContent = data.bmp.pressure.toFixed(2);
                     document.getElementById('bmp-altitude').textContent = data.bmp.altitude.toFixed(2);
+                    
+                    // Update MPU6050 data
                     document.getElementById('mpu-temp').textContent = data.mpu.temperature.toFixed(2);
                     document.getElementById('acc-x').textContent = data.mpu.acceleration.x.toFixed(3);
                     document.getElementById('acc-y').textContent = data.mpu.acceleration.y.toFixed(3);
@@ -128,8 +152,9 @@ String WebModule::generateHTML() {
 }
 
 String WebModule::generateJSON() {
-    // Update MPU data
+    // Update MPU and GPS data
     sensors.readMPUData();
+    sensors.updateGPSData();
     
     // Create JSON string with all sensor data
     String json = "{";
@@ -154,6 +179,18 @@ String WebModule::generateJSON() {
     json += "\"y\":" + String(sensors.getGyroY()) + ",";
     json += "\"z\":" + String(sensors.getGyroZ());
     json += "}";
+    json += "},";
+    
+    // GPS data
+    json += "\"gps\":{";
+    json += "\"valid\":" + String(sensors.isGPSDataValid() ? "true" : "false") + ",";
+    json += "\"latitude\":" + String(sensors.getLatitude(), 6) + ",";
+    json += "\"longitude\":" + String(sensors.getLongitude(), 6) + ",";
+    json += "\"altitude\":" + String(sensors.getGPSAltitude()) + ",";
+    json += "\"speed\":" + String(sensors.getSpeed()) + ",";
+    json += "\"satellites\":" + String(sensors.getSatellites()) + ",";
+    json += "\"time\":\"" + sensors.getGPSTime() + "\",";
+    json += "\"date\":\"" + sensors.getGPSDate() + "\"";
     json += "}";
     json += "}";
     

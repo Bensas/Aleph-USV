@@ -25,6 +25,7 @@ void setup() {
 
 void loop() {
   web_module.update();
+  sensor_module.updateGPSData();  // Update GPS data continuously
   
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint >= 1000) {  // Print every second
