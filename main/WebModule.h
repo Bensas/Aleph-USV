@@ -5,23 +5,26 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include "SensorModule.h"
+#include "ActuatorModule.h"
 
 class WebModule {
 private:
     const char* ssid;
     const char* password;
     WebServer server;
-    SensorModule& sensors;  // Reference to sensor module for data access
+    SensorModule& sensor_module;
+    ActuatorModule& actuator_module;
     
     void handleRoot();
     void handleData();
+    void handleServo();
     void handle404();
     
     String generateHTML();
     String generateJSON();
     
 public:
-    WebModule(const char* wifi_ssid, const char* wifi_password, SensorModule& sensor_module);
+    WebModule(const char* wifi_ssid, const char* wifi_password, SensorModule& sensor_module, ActuatorModule& actuator_module);
     
     bool begin();
     void update();

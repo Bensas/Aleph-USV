@@ -1,12 +1,14 @@
 #include <Arduino.h>
 #include "SensorModule.h"
+#include "ActuatorModule.h"
 #include "WebModule.h"
 
 const char* WIFI_SSID = "ALWAYS MONEY IN THE BANANA STAND";     // Replace with your WiFi SSID
 const char* WIFI_PASSWORD = "crazyivan42";  // Replace with your WiFi password
 
 SensorModule sensor_module;
-WebModule web_module(WIFI_SSID, WIFI_PASSWORD, sensor_module);
+ActuatorModule actuator_module;  // Servo on pin 25
+WebModule web_module(WIFI_SSID, WIFI_PASSWORD, sensor_module, actuator_module);
 
 void setup() {
   Serial.begin(115200);
@@ -14,6 +16,11 @@ void setup() {
 
   if (!sensor_module.begin()) {
     Serial.println("Failed to initialize all sensors. Check wiring and addresses.");
+    while (1) delay(10);
+  }
+
+  if (!actuator_module.begin()) {
+    Serial.println("Failed to initialize actuators. Check servo wiring.");
     while (1) delay(10);
   }
 

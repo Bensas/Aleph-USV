@@ -1,10 +1,11 @@
 #include "WebModule.h"
 
-WebModule::WebModule(const char* wifi_ssid, const char* wifi_password, SensorModule& sensor_module)
+WebModule::WebModule(const char* wifi_ssid, const char* wifi_password, SensorModule& sensor_module, ActuatorModule& actuator_module)
     : ssid(wifi_ssid)
     , password(wifi_password)
     , server(80)
-    , sensors(sensor_module) {
+    , sensor_module(sensor_module)
+    , actuator_module(actuator_module) {
 }
 
 bool WebModule::begin() {
@@ -32,6 +33,7 @@ bool WebModule::begin() {
     // Setup server routes
     server.on("/", [this]() { handleRoot(); });
     server.on("/data", [this]() { handleData(); });
+    server.on("/servo", [this]() { handleServo(); });
     server.onNotFound([this]() { handle404(); });
     
     // Start server
@@ -52,12 +54,22 @@ void WebModule::handleData() {
     server.send(200, "application/json", generateJSON());
 }
 
+void WebModule::handleServo() {
+    if (server.hasArg("angle")) {
+        int angle = server.arg("angle").toInt();
+        actuator_module.setPosition(angle);
+        server.send(200, "application/json", "{\"status\":\"success\",\"angle\":" + String(actuator_module.getPosition()) + "}");
+    } else {
+        server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing angle parameter\"}");
+    }
+}
+
 void WebModule::handle404() {
     server.send(404, "text/plain", "Not found");
 }
 
 String WebModule::generateHTML() {
-    String html = R"(
+    String html = R"END_HTML(
 <!DOCTYPE html>
 <html>
 <head>
@@ -88,6 +100,18 @@ String WebModule::generateHTML() {
             <p>Speed: <span id="gps-speed" class="value">--</span> knots</p>
             <p>Time: <span id="gps-time" class="value">--</span></p>
             <p>Date: <span id="gps-date" class="value">--</span></p>
+        </div>
+        <div class="sensor-box">
+            <h2>Servo Control</h2>
+            <p>Current Position: <span id="servo-position" class="value">90</span>°</p>
+            <p>
+                <label for="servo-slider">Servo Angle (0-180°):</label><br>
+                <input type="range" id="servo-slider" min="0" max="180" value="90" style="width: 100%; margin: 10px 0;">
+                <span id="slider-value" class="value">90</span>°
+            </p>
+            <p>
+                <button onclick="centerServo()" style="padding: 10px 20px; margin: 5px;">Center (90°)</button>
+            </p>
         </div>
         <div class="sensor-box">
             <h2>BMP280</h2>
@@ -140,57 +164,84 @@ String WebModule::generateHTML() {
                 .catch(error => console.error('Error fetching data:', error));
         }
         
-        // Update values every second
+        // Servo control functions
+        const slider = document.getElementById('servo-slider');
+        const sliderValue = document.getElementById('slider-value');
+        
+        slider.addEventListener('input', function() {
+            const angle = slider.value;
+            sliderValue.textContent = angle;
+            setServoPosition(angle);
+        });
+        
+        function setServoPosition(angle) {
+            fetch('/servo?angle=' + angle, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('servo-position').textContent = data.angle;
+                    } else {
+                        console.error('Servo error:', data.message);
+                    }
+                })
+                .catch(error => console.error('Error setting servo position:', error));
+        }
+        
+        function centerServo() {
+            slider.value = 90;
+            sliderValue.textContent = 90;
+            setServoPosition(90);
+        }
+        
         setInterval(updateValues, 1000);
-        // Initial update
         updateValues();
     </script>
 </body>
 </html>
-)";
+)END_HTML";
     return html;
 }
 
 String WebModule::generateJSON() {
     // Update MPU and GPS data
-    sensors.readMPUData();
-    sensors.updateGPSData();
+    sensor_module.readMPUData();
+    sensor_module.updateGPSData();
     
     // Create JSON string with all sensor data
     String json = "{";
     
     // BMP280 data
     json += "\"bmp\":{";
-    json += "\"temperature\":" + String(sensors.readBMPTemperature()) + ",";
-    json += "\"pressure\":" + String(sensors.readBMPPressure()) + ",";
-    json += "\"altitude\":" + String(sensors.readBMPAltitude());
+    json += "\"temperature\":" + String(sensor_module.readBMPTemperature()) + ",";
+    json += "\"pressure\":" + String(sensor_module.readBMPPressure()) + ",";
+    json += "\"altitude\":" + String(sensor_module.readBMPAltitude());
     json += "},";
     
     // MPU6050 data
     json += "\"mpu\":{";
-    json += "\"temperature\":" + String(sensors.getMPUTemperature()) + ",";
+    json += "\"temperature\":" + String(sensor_module.getMPUTemperature()) + ",";
     json += "\"acceleration\":{";
-    json += "\"x\":" + String(sensors.getAccelX()) + ",";
-    json += "\"y\":" + String(sensors.getAccelY()) + ",";
-    json += "\"z\":" + String(sensors.getAccelZ());
+    json += "\"x\":" + String(sensor_module.getAccelX()) + ",";
+    json += "\"y\":" + String(sensor_module.getAccelY()) + ",";
+    json += "\"z\":" + String(sensor_module.getAccelZ());
     json += "},";
     json += "\"gyro\":{";
-    json += "\"x\":" + String(sensors.getGyroX()) + ",";
-    json += "\"y\":" + String(sensors.getGyroY()) + ",";
-    json += "\"z\":" + String(sensors.getGyroZ());
+    json += "\"x\":" + String(sensor_module.getGyroX()) + ",";
+    json += "\"y\":" + String(sensor_module.getGyroY()) + ",";
+    json += "\"z\":" + String(sensor_module.getGyroZ());
     json += "}";
     json += "},";
     
     // GPS data
     json += "\"gps\":{";
-    json += "\"valid\":" + String(sensors.isGPSDataValid() ? "true" : "false") + ",";
-    json += "\"latitude\":" + String(sensors.getLatitude(), 6) + ",";
-    json += "\"longitude\":" + String(sensors.getLongitude(), 6) + ",";
-    json += "\"altitude\":" + String(sensors.getGPSAltitude()) + ",";
-    json += "\"speed\":" + String(sensors.getSpeed()) + ",";
-    json += "\"satellites\":" + String(sensors.getSatellites()) + ",";
-    json += "\"time\":\"" + sensors.getGPSTime() + "\",";
-    json += "\"date\":\"" + sensors.getGPSDate() + "\"";
+    json += "\"valid\":" + String(sensor_module.isGPSDataValid() ? "true" : "false") + ",";
+    json += "\"latitude\":" + String(sensor_module.getLatitude(), 6) + ",";
+    json += "\"longitude\":" + String(sensor_module.getLongitude(), 6) + ",";
+    json += "\"altitude\":" + String(sensor_module.getGPSAltitude()) + ",";
+    json += "\"speed\":" + String(sensor_module.getSpeed()) + ",";
+    json += "\"satellites\":" + String(sensor_module.getSatellites()) + ",";
+    json += "\"time\":\"" + sensor_module.getGPSTime() + "\",";
+    json += "\"date\":\"" + sensor_module.getGPSDate() + "\"";
     json += "}";
     json += "}";
     
