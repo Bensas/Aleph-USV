@@ -20,7 +20,12 @@ void setup() {
   }
 
   if (!actuator_module.begin()) {
-    Serial.println("Failed to initialize actuators. Check servo wiring.");
+    Serial.println("Failed to initialize servo. Check servo wiring.");
+    while (1) delay(10);
+  }
+
+  if (!actuator_module.beginMotor()) {
+    Serial.println("Failed to initialize motor. Check motor wiring.");
     while (1) delay(10);
   }
 

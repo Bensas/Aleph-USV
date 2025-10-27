@@ -18,6 +18,7 @@ private:
     void handleRoot();
     void handleData();
     void handleServo();
+    void handleMotor();
     void handle404();
     
     String generateHTML();

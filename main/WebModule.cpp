@@ -34,6 +34,7 @@ bool WebModule::begin() {
     server.on("/", [this]() { handleRoot(); });
     server.on("/data", [this]() { handleData(); });
     server.on("/servo", [this]() { handleServo(); });
+    server.on("/motor", [this]() { handleMotor(); });
     server.onNotFound([this]() { handle404(); });
     
     // Start server
@@ -61,6 +62,30 @@ void WebModule::handleServo() {
         server.send(200, "application/json", "{\"status\":\"success\",\"angle\":" + String(actuator_module.getPosition()) + "}");
     } else {
         server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing angle parameter\"}");
+    }
+}
+
+void WebModule::handleMotor() {
+    if (server.hasArg("speed")) {
+        int speed = server.arg("speed").toInt();
+        actuator_module.setMotorSpeed(speed);
+        server.send(200, "application/json", "{\"status\":\"success\",\"speed\":" + String(actuator_module.getMotorSpeed()) + "}");
+    } else if (server.hasArg("action")) {
+        String action = server.arg("action");
+        if (action == "stop") {
+            actuator_module.stopMotor();
+            server.send(200, "application/json", "{\"status\":\"success\",\"speed\":0}");
+        } else if (action == "enable") {
+            actuator_module.enableMotor();
+            server.send(200, "application/json", "{\"status\":\"success\",\"message\":\"Motor enabled\"}");
+        } else if (action == "disable") {
+            actuator_module.disableMotor();
+            server.send(200, "application/json", "{\"status\":\"success\",\"message\":\"Motor disabled\"}");
+        } else {
+            server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Unknown action\"}");
+        }
+    } else {
+        server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing speed or action parameter\"}");
     }
 }
 
@@ -114,6 +139,20 @@ String WebModule::generateHTML() {
             </p>
         </div>
         <div class="sensor-box">
+            <h2>DC Motor Control (TB6612FNG)</h2>
+            <p>Current Speed: <span id="motor-speed" class="value">0</span> (<span id="motor-direction" class="value">STOPPED</span>)</p>
+            <p>
+                <label for="motor-slider">Motor Speed (-255 to 255):</label><br>
+                <input type="range" id="motor-slider" min="-255" max="255" value="0" style="width: 100%; margin: 10px 0;">
+                <span id="motor-slider-value" class="value">0</span>
+            </p>
+            <p>
+                <button onclick="setMotorSpeedPreset(150)" style="padding: 10px 20px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Forward</button>
+                <button onclick="setMotorSpeedPreset(-150)" style="padding: 10px 20px; margin: 5px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer;">Reverse</button>
+                <button onclick="stopMotor()" style="padding: 10px 20px; margin: 5px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">Stop</button>
+            </p>
+        </div>
+        <div class="sensor-box">
             <h2>BMP280</h2>
             <p>Temperature: <span id="bmp-temp" class="value">--</span> °C</p>
             <p>Pressure: <span id="bmp-pressure" class="value">--</span> hPa</p>
@@ -160,6 +199,16 @@ String WebModule::generateHTML() {
                     document.getElementById('gyro-x').textContent = data.mpu.gyro.x.toFixed(3);
                     document.getElementById('gyro-y').textContent = data.mpu.gyro.y.toFixed(3);
                     document.getElementById('gyro-z').textContent = data.mpu.gyro.z.toFixed(3);
+                    
+                    // Update actuator data
+                    if (data.actuators) {
+                        if (data.actuators.servo) {
+                            document.getElementById('servo-position').textContent = data.actuators.servo.position;
+                        }
+                        if (data.actuators.motor) {
+                            updateMotorDisplay(data.actuators.motor.speed);
+                        }
+                    }
                 })
                 .catch(error => console.error('Error fetching data:', error));
         }
@@ -191,6 +240,56 @@ String WebModule::generateHTML() {
             slider.value = 90;
             sliderValue.textContent = 90;
             setServoPosition(90);
+        }
+        
+        // Motor control functions
+        const motorSlider = document.getElementById('motor-slider');
+        const motorSliderValue = document.getElementById('motor-slider-value');
+        
+        motorSlider.addEventListener('input', function() {
+            const speed = motorSlider.value;
+            motorSliderValue.textContent = speed;
+            setMotorSpeed(speed);
+        });
+        
+        function setMotorSpeed(speed) {
+            fetch('/motor?speed=' + speed, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        updateMotorDisplay(data.speed);
+                    } else {
+                        console.error('Motor error:', data.message);
+                    }
+                })
+                .catch(error => console.error('Error setting motor speed:', error));
+        }
+        
+        function setMotorSpeedPreset(speed) {
+            motorSlider.value = speed;
+            motorSliderValue.textContent = speed;
+            setMotorSpeed(speed);
+        }
+        
+        function stopMotor() {
+            motorSlider.value = 0;
+            motorSliderValue.textContent = 0;
+            fetch('/motor?action=stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        updateMotorDisplay(0);
+                    } else {
+                        console.error('Motor error:', data.message);
+                    }
+                })
+                .catch(error => console.error('Error stopping motor:', error));
+        }
+        
+        function updateMotorDisplay(speed) {
+            document.getElementById('motor-speed').textContent = speed;
+            const direction = speed > 0 ? 'FORWARD' : speed < 0 ? 'REVERSE' : 'STOPPED';
+            document.getElementById('motor-direction').textContent = direction;
         }
         
         setInterval(updateValues, 1000);
@@ -242,7 +341,18 @@ String WebModule::generateJSON() {
     json += "\"satellites\":" + String(sensor_module.getSatellites()) + ",";
     json += "\"time\":\"" + sensor_module.getGPSTime() + "\",";
     json += "\"date\":\"" + sensor_module.getGPSDate() + "\"";
+    json += "},";
+    
+    // Actuator data
+    json += "\"actuators\":{";
+    json += "\"servo\":{";
+    json += "\"position\":" + String(actuator_module.getPosition());
+    json += "},";
+    json += "\"motor\":{";
+    json += "\"speed\":" + String(actuator_module.getMotorSpeed());
     json += "}";
+    json += "}";
+    
     json += "}";
     
     return json;
