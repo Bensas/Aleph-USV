@@ -58,8 +58,8 @@ void WebModule::handleData() {
 void WebModule::handleServo() {
     if (server.hasArg("angle")) {
         int angle = server.arg("angle").toInt();
-        actuator_module.setPosition(angle);
-        server.send(200, "application/json", "{\"status\":\"success\",\"angle\":" + String(actuator_module.getPosition()) + "}");
+        actuator_module.servo.setPosition(angle);
+        server.send(200, "application/json", "{\"status\":\"success\",\"angle\":" + String(actuator_module.servo.getPosition()) + "}");
     } else {
         server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing angle parameter\"}");
     }
@@ -68,21 +68,15 @@ void WebModule::handleServo() {
 void WebModule::handleMotor() {
     if (server.hasArg("speed")) {
         int speed = server.arg("speed").toInt();
-        actuator_module.setMotorSpeed(speed);
-        server.send(200, "application/json", "{\"status\":\"success\",\"speed\":" + String(actuator_module.getMotorSpeed()) + "}");
+        actuator_module.motor.setSpeed(speed);
+        server.send(200, "application/json", "{\"status\":\"success\",\"speed\":" + String(actuator_module.motor.getSpeed()) + "}");
     } else if (server.hasArg("action")) {
         String action = server.arg("action");
         if (action == "stop") {
-            actuator_module.stopMotor();
+            actuator_module.motor.stop();
             server.send(200, "application/json", "{\"status\":\"success\",\"speed\":0}");
-        } else if (action == "enable") {
-            actuator_module.enableMotor();
-            server.send(200, "application/json", "{\"status\":\"success\",\"message\":\"Motor enabled\"}");
-        } else if (action == "disable") {
-            actuator_module.disableMotor();
-            server.send(200, "application/json", "{\"status\":\"success\",\"message\":\"Motor disabled\"}");
         } else {
-            server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Unknown action\"}");
+            server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Unknown action. Available action: stop\"}");
         }
     } else {
         server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing speed or action parameter\"}");
@@ -139,16 +133,15 @@ String WebModule::generateHTML() {
             </p>
         </div>
         <div class="sensor-box">
-            <h2>DC Motor Control (TB6612FNG)</h2>
+            <h2>DC Motor Control (Brushless ESC)</h2>
             <p>Current Speed: <span id="motor-speed" class="value">0</span> (<span id="motor-direction" class="value">STOPPED</span>)</p>
             <p>
-                <label for="motor-slider">Motor Speed (-255 to 255):</label><br>
-                <input type="range" id="motor-slider" min="-255" max="255" value="0" style="width: 100%; margin: 10px 0;">
+                <label for="motor-slider">Motor Speed (0 to 100):</label><br>
+                <input type="range" id="motor-slider" min="0" max="100" value="0" style="width: 100%; margin: 10px 0;">
                 <span id="motor-slider-value" class="value">0</span>
             </p>
             <p>
-                <button onclick="setMotorSpeedPreset(150)" style="padding: 10px 20px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Forward</button>
-                <button onclick="setMotorSpeedPreset(-150)" style="padding: 10px 20px; margin: 5px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer;">Reverse</button>
+                <button onclick="setMotorSpeedPreset(20)" style="padding: 10px 20px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Forward</button>
                 <button onclick="stopMotor()" style="padding: 10px 20px; margin: 5px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">Stop</button>
             </p>
         </div>
@@ -346,10 +339,10 @@ String WebModule::generateJSON() {
     // Actuator data
     json += "\"actuators\":{";
     json += "\"servo\":{";
-    json += "\"position\":" + String(actuator_module.getPosition());
+    json += "\"position\":" + String(actuator_module.servo.getPosition());
     json += "},";
     json += "\"motor\":{";
-    json += "\"speed\":" + String(actuator_module.getMotorSpeed());
+    json += "\"speed\":" + String(actuator_module.motor.getSpeed());
     json += "}";
     json += "}";
     

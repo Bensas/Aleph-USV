@@ -1,0 +1,23 @@
+%TF.GenerationSoftware,KiCad,Pcbnew,9.0.3*%
+%TF.CreationDate,2025-10-27T10:48:04-03:00*%
+%TF.ProjectId,Jorge,4a6f7267-652e-46b6-9963-61645f706362,rev?*%
+%TF.SameCoordinates,Original*%
+%TF.FileFunction,NonPlated,1,2,NPTH,Rout*%
+%TF.FilePolarity,Positive*%
+%FSLAX46Y46*%
+G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
+G04 Created by KiCad (PCBNEW 9.0.3) date 2025-10-27 10:48:04*
+%MOMM*%
+%LPD*%
+G01*
+G04 APERTURE LIST*
+G04 aperture for slot hole*
+%TA.AperFunction,ComponentDrill*%
+%ADD10C,1.000000*%
+%TD*%
+G04 APERTURE END LIST*
+D10*
+%TO.C,DC_Input1*%
+X156300000Y-45360000D02*
+X156300000Y-43360000D01*
+M02*
